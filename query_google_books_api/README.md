@@ -26,28 +26,26 @@ Implemented a containerized Google Books API search script written in Python, de
   params = {'key': API_KEY, ...}
   ```
 
-### Problem 3: Need Book URLs in Results
-
-**Issue:** User wanted to include links to books in output
-- **Initial Solution:** Used `selfLink` from API response
-- **Final Solution:** Constructed Google Books website URL using book ID
-
-  ```python
-  book_url = f'https://books.google.com/books?id={book_id}'
-  ```
-
-### Problem 4: Variable Naming Inconsistency
+### Problem 3: Variable Naming Inconsistency
 
 **Issue:** Variable called `raw_books` in main but `results` in function parameter
 - **Solution:** Renamed to `results` throughout for consistency
 
-### Enhancement: CLI Arguments
+### Enhancement 1: CLI Arguments
 
 **Improvement:** Added ability to pass search term as command-line argument
 
 ```python
 search_term = sys.argv[1] if len(sys.argv) > 1 else error_handling
 ```
+
+### Enhancement 2: Add Book URLs to Results
+
+**Improvement:** Constructed Google Books website URL using book ID
+
+  ```python
+  book_url = f'https://books.google.com/books?id={book_id}'
+  ```
 
 ---
 
