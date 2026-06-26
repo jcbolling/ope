@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: google-books-search
+  namespace: google-books-search
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: google-books-search
+  template:
+    metadata:
+      labels:
+        app: google-books-search
+    spec:
+      serviceAccountName: default
+      imagePullSecrets:
+      - name: gcr-auth-details
+      containers:
+      - name: google-books
+        image: us-central1-docker.pkg.dev/pe-upbeat-deer-392/dev-registry-1/google-books-search:v1.0.7
+        envFrom:
+        - configMapRef:
+            name: google-books-config
+        env:
+        - name: GOOGLE_BOOKS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: google-api-secret
+              key: api-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - cron
+          initialDelaySeconds: 5
+          periodSeconds: 30
