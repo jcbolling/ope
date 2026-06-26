@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pe-web
+  name: pe-web
+  namespace: pe-demo-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pe-web
+  template:
+    metadata:
+      labels:
+        app: pe-web
+    spec:
+      containers:
+      - name: pe-app
+        image: us-central1-docker.pkg.dev/pe-upbeat-deer-392/dev-registry-1/pe-demo-app:v1
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 1
+          failureThreshold: 1
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 1
+          failureThreshold: 1
+          successThreshold: 1
+        env:
+          - name: ENV # Environment variable name passed to container
+            valueFrom:
+              configMapKeyRef:
+                name: env-config
+                key: environ
