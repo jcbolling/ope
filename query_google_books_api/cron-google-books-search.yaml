@@ -1,34 +1,36 @@
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: google-books-search
-  namespace: google-books-search
-spec:
-  schedule: "*/5 * * * *"  # Run every 5 minutes
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: default
-          imagePullSecrets:
-          - name: gcr-auth-details
-          containers:
-          - name: google-books
-            image: gcr.io/ope-take-home/google-books-search:v1.0.1
-            args: ["Kubernetes"]  # Example search term and result limit
-            env:
-            - name: GOOGLE_BOOKS_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: google-api-secret
-                  key: api-key
-            resources:
-              requests:
-                memory: "128Mi"
-                cpu: "100m"
-              limits:
-                memory: "256Mi"
-                cpu: "500m"
-          restartPolicy: OnFailure
-  successfulJobsHistoryLimit: 5
-  failedJobsHistoryLimit: 3
+  apiVersion: batch/v1
+  kind: CronJob
+  metadata:
+    name: google-books-search
+    namespace: google-books-search
+  spec:
+    schedule: "*/5 * * * *"  # Run every 5 minutes for demo purposes
+    concurrencyPolicy: Forbid # Only allow a single job to run at a time
+    jobTemplate:
+      spec:
+        template:
+          spec:
+            serviceAccountName: default
+            imagePullSecrets:
+            - name: gcr-auth-details
+            containers:
+            - name: google-books
+              #image: gcr.io/ope-take-home/google-books-search:v1.0.1 # Image hosted on my personal GCP project.
+              image: us-central1-docker.pkg.dev/pe-upbeat-deer-392/dev-registry-1/google-books-search:v1.0.1
+              args: ["Kubernetes"]  # Example search term. Pass ["<search_term>", <max_results_int>] to override default limit of 25.
+              env:
+              - name: GOOGLE_BOOKS_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: google-api-secret
+                    key: api-key
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+            restartPolicy: OnFailure
+    successfulJobsHistoryLimit: 1
+    failedJobsHistoryLimit: 1
