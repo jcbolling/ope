@@ -355,4 +355,160 @@ output "postgres_password" {
 ---
 ## Task 3: Write a Script to Pull Data From an API
 
-See dedicated [README](https://github.com/jcbolling/ope/tree/main/query_google_books_api#readme).
+### Overview
+
+Unlike anacron and cluster-managed cronjobs, cron has no native means of handling missed executions if the pod crashes, but long-term authenitcation considerations make a local cronjob the best option for the purposes of this project. The goal of this project is to run a Python script (query_google_books_api.py) on a cron schedule inside a Kubernetes pod, with the schedule and script arguments configurable via a ConfigMap without the need to rebuild the image. To see the notes on my first attempt at this task as well as issues I ran into during development of the script please click [here](https://github.com/jcbolling/ope/tree/main/query_google_books_api#readme).
+
+
+#### Files
+
+**entrypoint.sh**
+
+Dynamically generates the crontab at container startup from environment variables, then starts cron in the foreground so output is captured by kubectl logs.
+
+```bash
+#!/bin/sh
+set -e
+
+# cron runs in a stripped-down environment requiring the API key be explictly passed in
+
+echo "$CRON_SCHEDULE GOOGLE_BOOKS_API_KEY=$GOOGLE_BOOKS_API_KEY /usr/local/bin/python3 /app/query_google_books_api.py '$SEARCH_TERM' $MAX_RESULTS >> /proc/1/fd/1 2>> /proc/1/fd/2" > /tmp/crontab
+
+crontab /tmp/crontab
+
+echo "Starting cron with schedule: $CRON_SCHEDULE"
+exec cron -f -L /dev/stdout
+```
+
+**Dockerfile**
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y cron procps && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY query_google_books_api.py .
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+```
+
+**ConfigMap**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: google-books-config
+  namespace: google-books-search
+data:
+  SEARCH_TERM: "Kubernetes"
+  MAX_RESULTS: "" # Optional. If left blank, the default limit of 25 will be used
+  CRON_SCHEDULE: "0 */12 * * *" # Run every 12 to avoid exhausing API quota. Change to "*/1 * * * *" for demo purposes.
+```
+
+**Deployment**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: google-books-search
+  namespace: google-books-search
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: google-books-search
+  template:
+    metadata:
+      labels:
+        app: google-books-search
+    spec:
+      serviceAccountName: default
+      imagePullSecrets:
+      - name: gcr-auth-details
+      containers:
+      - name: google-books
+        image: us-central1-docker.pkg.dev/pe-upbeat-deer-392/dev-registry-1/google-books-search:v1.0.7
+        envFrom:
+        - configMapRef:
+            name: google-books-config
+        env:
+        - name: GOOGLE_BOOKS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: google-api-secret
+              key: api-key
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - cron
+          initialDelaySeconds: 5
+          periodSeconds: 30
+```
+
+
+#### Deployment Steps
+
+1. Build and push the image
+
+```bash
+docker buildx build --push \
+  -t us-central1-docker.pkg.dev/pe-upbeat-deer-392/dev-registry-1/google-books-search:v<version> .
+```
+
+2. Create the namespace
+
+```bash
+kubectl create namespace google-books-search
+```
+
+3. Create the API key secret
+
+```bash
+kubectl create secret generic google-api-secret \
+  --from-literal=api-key=<your-api-key> \
+  --namespace=google-books-search
+```
+
+4. Create the image pull secret
+
+```bash
+kubectl create secret docker-registry gcr-auth-details \
+  --docker-server=us-central1-docker.pkg.dev \
+  --docker-username=oauth2accesstoken \
+  --docker-password="$(gcloud auth print-access-token)" \
+  --namespace=google-books-search
+```
+
+
+**Note: Personal access tokens expire after 1 hour, but that shouldn't really matter for the purposes of this project as the image shouldn't need to tbe pulled very often.**
+
+5. Apply the ConfigMap and Deployment
+
+```bash
+kubectl apply -f configmap-google-books-search.yaml
+kubectl apply -f deployment-google-books-search.yaml
+```
+
+6. Verify
+
+```bash
+kubectl get pods -n google-books-search
+kubectl logs <pod-name> -n google-books-search
+```

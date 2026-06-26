@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: google-books-config
+  namespace: google-books-search
+data:
+  SEARCH_TERM: "Kubernetes"
+  MAX_RESULTS: "" # Optional. If left blank, the default limit of 25 will be used
+  CRON_SCHEDULE: "0 */12 * * *" # Run every 12 to avoid exhausing API quota. Change to "*/1 * * * *" for demo purposes.
