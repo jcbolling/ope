@@ -193,6 +193,31 @@ kubectl logs pe-web-68d7474cb4-d48rf -n pe-demo-app
 
 **Solution**: Add an env section to the container spec defining the ENV variable referencing the configMap in the app-deployment manifest and re-apply.
 
+**Bonus problem I found double-checking everyhing was working as expected:** I idenified a transient issue when curling the `pe-web` service causing the request to return `500 - Error due to redis cluster broken!`.
+
+**Diagnostic commands**
+
+After some investigation, I discovered redis-5 was landing on a preemptible node which isn't ideal for a staeful workload like Redis.
+
+```bash
+redis-5                   1/1     Running   0          88m    10.20.1.4   gke-pe-upbeat-deer-392-np-preemptible-81ec29ff-x56e   <none>           <none>
+```
+
+**Solution**
+
+To prevent Redis pods from being scheduled on preemptible nodes I added a node affinity policy to the stateful set as shown below:
+
+```yaml
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-nodepool
+                operator: In
+                values:
+                - np-default
+```
+
 ---
 
 ## Task 2: Manage Infrastructure with Terraform
